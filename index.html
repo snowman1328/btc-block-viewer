@@ -1,0 +1,110 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      font-family: monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    #block {
+      width: 500px;
+      height: 500px;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      border: 2px solid #444;
+      background: #1b1b1b;
+      padding: 2px;
+      overflow: hidden;
+      position: relative;
+    }
+    .tx {
+      margin: 1px;
+      box-sizing: border-box;
+      border: 1px solid #222;
+      position: relative;
+      transition: background 0.3s ease;
+    }
+    .tx:hover::after {
+      content: attr(data-info);
+      position: absolute;
+      top: 0;
+      left: 0;
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      font-size: 10px;
+      padding: 4px;
+      white-space: pre;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="block"></div>
+
+  <script>
+    const blockDiv = document.getElementById("block");
+
+    async function loadBlock() {
+      try {
+        const blocks = await fetch("/.netlify/functions/get-block").then(r => r.json());
+        const latestBlockHash = blocks[0].id;
+
+        const txids = await fetch(`/.netlify/functions/get-txids?blockId=${latestBlockHash}/txids`).then(r => r.json());
+        const limitedTxids = txids.slice(0, 80);
+
+        let txData = [];
+        let totalVsize = 0;
+
+        for (const txid of limitedTxids) {
+          const tx = await fetch(`/.netlify/functions/get-tx?txid=${txid}`).then(r => r.json());
+          const feeRate = tx.fee / tx.vsize;
+          txData.push({
+            vsize: tx.vsize,
+            feeRate: feeRate,
+            id: tx.txid,
+            fee: tx.fee
+          });
+          totalVsize += tx.vsize;
+        }
+
+        const blockArea = 500 * 500;
+
+        txData.forEach(tx => {
+          const relSize = tx.vsize / totalVsize;
+          const pixelArea = relSize * blockArea;
+          const side = Math.sqrt(pixelArea);
+
+          const div = document.createElement("div");
+          div.className = "tx";
+          div.style.width = `${side}px`;
+          div.style.height = `${side}px`;
+
+          if (tx.feeRate > 50) div.style.backgroundColor = "#ff4d4d";
+          else if (tx.feeRate > 20) div.style.backgroundColor = "#ffaa00";
+          else div.style.backgroundColor = "#33cc33";
+
+          div.setAttribute("data-info",
+            `TXID: ${tx.id.slice(0, 8)}…\nFee: ${(tx.fee / 1e5).toFixed(2)} sats\nvSize: ${tx.vsize} vB\n${tx.feeRate.toFixed(1)} sat/vB`
+          );
+
+          blockDiv.appendChild(div);
+        });
+
+      } catch (err) {
+        blockDiv.innerHTML = "<p style='color:white;'>Fehler beim Laden.</p>";
+        console.error(err);
+      }
+    }
+
+    loadBlock();
+  </script>
+</body>
+</html>
